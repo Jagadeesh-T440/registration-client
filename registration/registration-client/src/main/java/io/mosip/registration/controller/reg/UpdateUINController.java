@@ -120,7 +120,7 @@ public class UpdateUINController extends BaseController implements Initializable
 		ProcessSpecDto processSpecDto = getProcessSpec(getRegistrationDTOFromSession().getProcessId(), getRegistrationDTOFromSession().getIdSchemaVersion());
 		processSpecDto.getScreens().forEach(screen -> {
 			screen.getFields().forEach(field -> {
-				if(field.getGroup() != null) {
+				if(field.getGroup() != null && !getRegistrationDTOFromSession().getDefaultUpdatableFieldGroups().contains(field.getGroup())) {
 					List<UiFieldDTO> fields = groupedMap.getOrDefault(field.getGroup(), new ArrayList<>());
 					fields.add(field);
 					groupedMap.put(field.getGroup(), fields);
