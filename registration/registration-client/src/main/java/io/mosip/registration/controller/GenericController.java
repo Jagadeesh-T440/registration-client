@@ -2,6 +2,14 @@ package io.mosip.registration.controller;
 
 import io.mosip.registration.enums.FlowType;
 import javafx.beans.binding.Bindings;
+import javafx.fxml.Initializable;
+
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+import java.util.ResourceBundle;
 
 import static io.mosip.registration.constants.RegistrationConstants.EMPTY;
 import static io.mosip.registration.constants.RegistrationConstants.HASH;
@@ -86,6 +94,8 @@ import lombok.SneakyThrows;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 
+import javax.imageio.ImageIO;
+
 /**
  * {@code GenericController} is to capture the demographic/demo/Biometric
  * details
@@ -162,6 +172,7 @@ public class GenericController extends BaseController {
 	private static TreeMap<Integer, UiScreenDTO> orderedScreens = new TreeMap<>();
 	private static Map<String, FxControl> fxControlMap = new HashMap<String, FxControl>();
 	private Stage keyboardStage;
+	private boolean preregFetching = false;
 	private boolean keyboardVisible = false;
 	private String previousId;
 	private Integer additionalInfoReqIdScreenOrder = null;
@@ -270,6 +281,7 @@ public class GenericController extends BaseController {
 	}
 
 	void executePreRegFetchTask(TextField textField, String processFlow) {
+		preregFetching = true;
 		genericScreen.setDisable(true);
 		progressIndicator.setVisible(true);
 
@@ -350,6 +362,7 @@ public class GenericController extends BaseController {
 		taskService.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
 			@Override
 			public void handle(WorkerStateEvent workerStateEvent) {
+				preregFetching = false;
 				genericScreen.setDisable(false);
 				progressIndicator.setVisible(false);
 			}
@@ -357,6 +370,7 @@ public class GenericController extends BaseController {
 		taskService.setOnFailed(new EventHandler<WorkerStateEvent>() {
 			@Override
 			public void handle(WorkerStateEvent t) {
+				preregFetching = false;
 				LOGGER.debug("Pre Registration Fetch failed");
 				genericScreen.setDisable(false);
 				progressIndicator.setVisible(false);
@@ -471,19 +485,31 @@ public class GenericController extends BaseController {
 				FxControl fxControl = getFxControl(field.getId());
 				if (fxControl != null) {
 					switch (fxControl.getUiSchemaDTO().getType()) {
-					case "biometricsType":
-						break;
-					case "documentType":
-						fxControl.selectAndSet(getRegistrationDTOFromSession().getDocuments().get(field.getId()));
-						break;
-					default:
+						case "biometricsType":
+							break;
+						case "documentType":
+							fxControl.selectAndSet(getRegistrationDTOFromSession().getDocuments().get(field.getId()));
+							var document = getRegistrationDTOFromSession().getDocuments().get(field.getId());
+							if (document != null && document.getDocument() != null && !"pdf".equals(document.getFormat())) {
+								InputStream is = new ByteArrayInputStream(document.getDocument());
+								BufferedImage newBi = null;
+								try {
+									newBi = ImageIO.read(is);
+								} catch (IOException e) {
+									LOGGER.error("Buffered images conversion failed : {}", e);
+								}
+								if (newBi != null) {
+									List<BufferedImage> list = new LinkedList<>();
+									list.add(newBi);
+									fxControl.setData(list);
+									document.setFormat("pdf");
+								}
+							}
+							break;
+						default:
 
-						var demographicsCopy = (Map<String, Object>) SessionContext.map()
-								.get(RegistrationConstants.REGISTRATION_DATA_DEMO);
-						fxControl.selectAndSet(
-								getRegistrationDTOFromSession().getDemographics().get(field.getId()) != null
-										? getRegistrationDTOFromSession().getDemographics().get(field.getId())
-										: demographicsCopy.get(field.getId()));
+							var demographicsCopy = (Map<String, Object>) SessionContext.map().get(RegistrationConstants.REGISTRATION_DATA_DEMO);
+							fxControl.selectAndSet(getRegistrationDTOFromSession().getDemographics().get(field.getId()) != null ? getRegistrationDTOFromSession().getDemographics().get(field.getId()) : demographicsCopy.get(field.getId()));
 //it will read data from field components and set it in registrationDTO along with selectedCodes and ageGroups
 //kind of supporting data
 						fxControl.setData(getRegistrationDTOFromSession().getDemographics().get(field.getId()) != null
@@ -605,6 +631,32 @@ public class GenericController extends BaseController {
 
 			atLeastOneVisible = screenDTO.get().getFields().stream().anyMatch(
 					field -> getFxControl(field.getId()) != null && getFxControl(field.getId()).getNode().isVisible());
+		}
+		LOGGER.info("Screen refreshed, Screen: {} visible : {}", screenName, atLeastOneVisible);
+		return atLeastOneVisible;
+	}
+	
+	private boolean refreshScreenVisibilityForDependentFields(String screenName, List<String> dependentFields) {
+		boolean atLeastOneVisible = true;
+		Optional<UiScreenDTO> screenDTO = orderedScreens.values()
+				.stream()
+				.filter(screen -> screen.getName().equals(screenName))
+				.findFirst();
+
+		if(screenDTO.isPresent()) {
+			LOGGER.info("Refreshing Screen: {}", screenName);
+			screenDTO.get().getFields().forEach( field -> {
+				if(dependentFields.contains(field.getId())) {
+					FxControl fxControl = getFxControl(field.getId());
+					if(fxControl != null)
+						fxControl.refreshDependentFields();
+				}
+			});
+
+			atLeastOneVisible = screenDTO.get()
+					.getFields()
+					.stream()
+					.anyMatch( field -> getFxControl(field.getId()) != null && getFxControl(field.getId()).getNode().isVisible() );
 		}
 		LOGGER.info("Screen refreshed, Screen: {} visible : {}", screenName, atLeastOneVisible);
 		return atLeastOneVisible;
@@ -736,6 +788,9 @@ public class GenericController extends BaseController {
 							if (result.isPresent() && result.get() == proceedButton) {
 								// If OK is clicked, proceed to change the tab
 								ignoreChange[0] = true;
+								int newSelection = newValue.intValue() < 0 ? 0 : newValue.intValue();
+								final String newScreenName = tabPane.getTabs().get(newSelection).getId().replace("_tab", EMPTY);
+								tabPane.getTabs().get(newSelection).setDisable(!refreshScreenVisibility(newScreenName));
 								tabPane.getSelectionModel().select(newValue.intValue());
 							} else {
 								// If Cancel is clicked, remain on the current tab
@@ -987,8 +1042,8 @@ public class GenericController extends BaseController {
 					/* Adding Group label */
 					Label label = new Label(groupEntry.getKey());
 					label.getStyleClass().add("demoGraphicCustomLabel");
-					label.setPadding(new Insets(0, 0, 0, 55));
-					// label.setPrefWidth(1200);
+					label.setStyle("-fx-font-weight: 700; -fx-font-size: 15px;");
+					//label.setPrefWidth(1200);
 					groupFlowPane.add(label, 0, 0, 2, 1);
 				}
 				int fieldIndex = 0;
@@ -1390,6 +1445,37 @@ public class GenericController extends BaseController {
 		orderedScreens.values().forEach(screen -> {
 			refreshScreenVisibility(screen.getName());
 		});
+	}
+	
+	public void refreshDependentFields(List<String> dependentFields) {
+		orderedScreens.values().forEach(screen -> { refreshScreenVisibilityForDependentFields(screen.getName(), dependentFields); });
+	}
+	
+	public void resetValue() {
+		if(preregFetching == false) {
+			for (UiScreenDTO screenDTO : orderedScreens.values()) {
+				for (UiFieldDTO field : screenDTO.getFields()) {
+					FxControl fxControl = getFxControl(field.getId());
+					if (fxControl != null) {
+						switch (fxControl.getUiSchemaDTO().getType()) {
+							case "biometricsType":
+								fxControl.selectAndSet(null);
+								break;
+							case "documentType":
+								fxControl.clearValue();
+								break;
+							default:
+								if(!field.getId().equals("userServiceType") && screenDTO.getOrder() == 2) {
+									fxControl.selectAndSet(null);
+									fxControl.setData(null);
+									fxControl.clearToolTipText();
+								}
+								break;
+						}
+					}
+				}
+			}
+		}
 	}
 
 	/*

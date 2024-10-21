@@ -212,11 +212,17 @@ public class DropDownFxControl extends FxControl {
 			case RegistrationConstants.SIMPLE_TYPE:
 				List<SimpleDto> values = new ArrayList<SimpleDto>();
 				for (String langCode : getRegistrationDTo().getSelectedLanguagesByApplicant()) {
-					Optional<GenericDto> result = getPossibleValues(langCode).stream()
-							.filter(b -> b.getCode().equals(selectedCode)).findFirst();
-					if (result.isPresent()) {
-						SimpleDto simpleDto = new SimpleDto(langCode, result.get().getName());
+					if(langCode.equals(appComboBox.getSelectionModel().getSelectedItem().getLangCode())) {
+						SimpleDto simpleDto = new SimpleDto(langCode, appComboBox.getSelectionModel().getSelectedItem().getName());
 						values.add(simpleDto);
+					}
+					else {
+						Optional<GenericDto> result = getPossibleValues(langCode).stream()
+								.filter(b -> b.getCode().equals(selectedCode)).findFirst();
+						if (result.isPresent()) {
+							SimpleDto simpleDto = new SimpleDto(langCode, result.get().getName());
+							values.add(simpleDto);
+						}
 					}
 				}
 				getRegistrationDTo().addDemographicField(uiFieldDTO.getId(), values);
@@ -269,11 +275,16 @@ public class DropDownFxControl extends FxControl {
 				List<String> toolTipText = new ArrayList<>();
 				String selectedCode = fieldComboBox.getSelectionModel().getSelectedItem().getCode();
 				for (String langCode : getRegistrationDTo().getSelectedLanguagesByApplicant()) {
-					Optional<GenericDto> result = getPossibleValues(langCode).stream()
-							.filter(b -> b.getCode().equals(selectedCode)).findFirst();
-					if (result.isPresent()) {
-						
-						toolTipText.add(result.get().getName());
+					if(langCode.equals(fieldComboBox.getSelectionModel().getSelectedItem().getLangCode())) {
+						toolTipText.add(fieldComboBox.getSelectionModel().getSelectedItem().getName());
+					}
+					else {
+						Optional<GenericDto> result = getPossibleValues(langCode).stream()
+								.filter(b -> b.getCode().equals(selectedCode)).findFirst();
+						if (result.isPresent()) {
+							
+							toolTipText.add(result.get().getName());
+						}
 					}
 				}
 
@@ -283,10 +294,23 @@ public class DropDownFxControl extends FxControl {
 				setData(null);
 				refreshNextHierarchicalFxControls();
 				demographicChangeActionHandler.actionHandle((Pane) getNode(), node.getId(),	uiFieldDTO.getChangeAction());
+				
+				if (uiFieldDTO.getId().equals("userServiceType")) {	
+					resetValue();		
+				}
+				
 				// Group level visibility listeners
-				refreshFields();
+				if(uiFieldDTO.getDependentFields() != null && !uiFieldDTO.getDependentFields().isEmpty()) {
+					refreshDependentFields(uiFieldDTO.getDependentFields());
+				}
 			}
 		});
+	}
+	
+	@Override
+	public void clearToolTipText() {
+		Label messageLabel = (Label) getField(uiFieldDTO.getId() + RegistrationConstants.MESSAGE);
+		messageLabel.setText(null);
 	}
 
 	private void refreshNextHierarchicalFxControls() {
