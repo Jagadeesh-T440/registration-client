@@ -50,6 +50,7 @@ public class PrnService {
 	@Value("${nira.payment.gateway.service.consume-prn}")
 	private String urlConsumePrn;
 	
+	@Autowired
 	ObjectMapper objectMapper;
 
 	public CheckPRNStatusResponseDTO checkPRNStatus(String prn) {
@@ -61,7 +62,6 @@ public class PrnService {
 	    headers.setContentType(MediaType.APPLICATION_JSON);
 
 	    PrnMainResponseWrapperDTO<?> returnedResponse = null;
-	    objectMapper = new ObjectMapper();
 
 	    try {
 	        returnedResponse = sendHttpRequest(
@@ -98,7 +98,6 @@ public class PrnService {
 	    headers.setContentType(MediaType.APPLICATION_JSON);
 
 	    PrnMainResponseWrapperDTO<?> returnedResponse = null;
-	    objectMapper = new ObjectMapper();
 
 	    try {
 	        returnedResponse = sendHttpRequest(
@@ -138,7 +137,6 @@ public class PrnService {
 	    headers.setContentType(MediaType.APPLICATION_JSON);
 
 	    PrnMainResponseWrapperDTO<?> returnedResponse = null;
-	    objectMapper = new ObjectMapper();
 
 	    try {
 	        returnedResponse = sendHttpRequest(
@@ -172,7 +170,6 @@ public class PrnService {
 
         HttpEntity<Object> entity = new HttpEntity<>(requestBody, headers);
 
-        restTemplate = new RestTemplate();
         ResponseEntity<T> response = restTemplate.exchange(url, httpMethod, entity, responseType);
         return response.getBody();
     }
